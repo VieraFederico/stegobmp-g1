@@ -1,5 +1,5 @@
 #include "lsb1.h"
-
+#include <stdio.h>
 int lsb1_embed(uint8_t *pixels, size_t pixels_len, const uint8_t *data, size_t data_len) {
     size_t bits_needed = data_len * 8;
 
