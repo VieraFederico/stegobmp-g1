@@ -4,6 +4,9 @@
 #include "../../bmp_handler/bmp_handler.h"
 #include "../parser/parser.h"
 
+typedef int (*embed_func_t)(uint8_t *pixels, size_t pixels_len, const uint8_t *data, size_t data_len);
+typedef int (*extract_func_t)(const uint8_t *pixels, size_t pixels_len, uint8_t *out, size_t data_len);
+
 /**
  * @brief Performs the embed operation
  * 
