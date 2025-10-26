@@ -118,10 +118,33 @@ int perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
 int perform_extract(const stegobmp_config_t *config, const Bmp *bmp)
 {
     uint8_t size_be[4];
-    if (lsb1_extract(bmp->pixels, bmp->pixelsSize, size_be, 4) != 0)
+    int rc = 0;
+    switch (config->steg_method)
     {
-        fprintf(stderr, "Fallo extract size\n");
-        return 1;
+        case STEG_LSB1:
+            if (lsb1_extract(bmp->pixels, bmp->pixelsSize, size_be, 4) != 0) {
+                fprintf(stderr, "Fallo extract size (LSB1)\n");
+                return 1;
+            }
+            break;
+
+        case STEG_LSB4:
+            if (lsb4_extract(bmp->pixels, bmp->pixelsSize, size_be, 4) != 0) {
+                fprintf(stderr, "Fallo extract size (LSB4)\n");
+                return 1;
+            }
+            break;
+
+        case STEG_LSBI:
+            if (lsbi_extract(bmp->pixels, bmp->pixelsSize, size_be, 4) != 0) {
+                fprintf(stderr, "Fallo extract size (LSBI)\n");
+                return 1;
+            }
+            break;
+
+        default:
+            fprintf(stderr, "Metodo de esteganografiado no soportado\n");
+            return 1;
     }
     uint32_t real_size = be_to_u32(size_be);
 
@@ -143,7 +166,21 @@ int perform_extract(const stegobmp_config_t *config, const Bmp *bmp)
         return 1;
     }
 
-    if (lsb1_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes) != 0)
+    switch (config->steg_method)
+    {
+        case STEG_LSB1:
+            rc = lsb1_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes);
+            break;
+        case STEG_LSB4:
+            rc = lsb4_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes);
+            break;
+        case STEG_LSBI:
+            rc = lsbi_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes);
+            break;
+        default:
+            rc = -1;
+    }
+    if (rc != 0)
     {
         fprintf(stderr, "Fallo extract bloque\n");
         free(all);
