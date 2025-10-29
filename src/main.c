@@ -6,6 +6,11 @@
 #include "./utils/parser/parser.h"
 #include "./utils/operations/operations.h"
 
+static int exit_code_from_ops_result(OperationsResult rc)
+{
+    return rc == OPS_OK ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
     stegobmp_config_t config;
@@ -30,7 +35,7 @@ int main(int argc, char **argv)
         free_config(&config);
         return 1;
     }
-    int rc=0;
+    OperationsResult rc = OPS_OK;
 
     switch (config.operation)
     {
@@ -42,10 +47,11 @@ int main(int argc, char **argv)
         break;
     default:
         fprintf(stderr, "not valid operation\n");
+        rc = OPS_INVALID_STEG_METHOD;
         break;
     }
 
     bmp_free(&bmp);
     free_config(&config);
-    return rc;
+    return exit_code_from_ops_result(rc);
 }

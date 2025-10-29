@@ -11,312 +11,176 @@
 #include "../parser/parser.h"
 #include "operations.h"
 
-int perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
+OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
 {
-    uint8_t *inbuf = NULL;
-    size_t inlen = 0;
+    uint8_t *input_buffer = NULL;
+    size_t input_length = 0;
     
     // Read input file to embed
-    if (read_file(config->in_file, &inbuf, &inlen) != 0)
+    if (read_file(config->in_file, &input_buffer, &input_length) != 0)
     {
         fprintf(stderr, "No pude leer -in\n");
-        return 1;
+        return OPS_INPUT_READ_FAILED;
     }
 
     // Build payload: size(4 BE) || data || extension(".ext\0")
-    const char *dot = strrchr(config->in_file, '.');
-    char extbuf[64];
+    const char *extension_dot_ptr = strrchr(config->in_file, '.');
+    char extension_buffer[64];
 
-    if (dot)
-        snprintf(extbuf, sizeof(extbuf), "%s", dot);
+    if (extension_dot_ptr)
+        snprintf(extension_buffer, sizeof(extension_buffer), "%s", extension_dot_ptr);
     else
-        snprintf(extbuf, sizeof(extbuf), ".bin");
+        snprintf(extension_buffer, sizeof(extension_buffer), ".bin");
 
-    size_t extlen = strlen(extbuf) + 1; // include '\0'
+    size_t extension_length = strlen(extension_buffer) + 1; // include '\0'
 
-    size_t payload_len = 4 + inlen + extlen;
-    uint8_t *payload = (uint8_t *)malloc(payload_len);
+    size_t payload_length = 4 + input_length + extension_length;
+    uint8_t *payload_buffer = (uint8_t *)malloc(payload_length);
 
-    if (!payload)
+    if (!payload_buffer)
     {
-        free(inbuf);
-        return 1;
+        free(input_buffer);
+        return OPS_PAYLOAD_ALLOC_FAILED;
     }
 
-    u32_to_be((uint32_t)inlen, payload);
-    memcpy(payload + 4, inbuf, inlen);
-    memcpy(payload + 4 + inlen, extbuf, extlen);
+    u32_to_be((uint32_t)input_length, payload_buffer);
+    memcpy(payload_buffer + 4, input_buffer, input_length);
+    memcpy(payload_buffer + 4 + input_length, extension_buffer, extension_length);
 
-    //size_t cap_bytes = bmp_payload_size(bmp) / 8; // LSB1: 1 bit per byte -> /8
-
-    embed_func_t embed_fun = NULL;
-    char *method_name = "";
-    size_t pixels_per_data_byte = 0;
+    embed_func_t selected_embed_function = NULL;
+    const char *steg_method_name = "";
+    size_t pixel_bytes_per_data_byte = 0;
 
     switch (config->steg_method)
     {
         case STEG_LSB1:
-            embed_fun = lsb1_embed;
-            pixels_per_data_byte = 8;
-            method_name = "LSB1";
+            selected_embed_function = lsb1_embed;
+            pixel_bytes_per_data_byte = 8;
+            steg_method_name = "LSB1";
             break;
         case STEG_LSB4:
-            embed_fun = lsb4_embed;
-            pixels_per_data_byte = 2; 
-            method_name = "LSB4";
+            selected_embed_function = lsb4_embed;
+            pixel_bytes_per_data_byte = 2; 
+            steg_method_name = "LSB4";
             break;
         case STEG_LSBI:
-            embed_fun = lsbi_embed;
-            pixels_per_data_byte = 8;
-            method_name = "LSBI";
+            selected_embed_function = lsbi_embed;
+            pixel_bytes_per_data_byte = 8;
+            steg_method_name = "LSBI";
             break;
         default:
             fprintf(stderr, "Invalid Steg Method: %d\n", config->steg_method);
-            free(payload);
-            free(inbuf);
-            return 1;
+            free(payload_buffer);
+            free(input_buffer);
+            return OPS_INVALID_STEG_METHOD;
             break;
     }
 
-    size_t cap_bytes = bmp_payload_size(bmp) / pixels_per_data_byte;
+    size_t capacity_bytes = bmp_payload_size(bmp) / pixel_bytes_per_data_byte;
     
-    if (payload_len > cap_bytes)
+    if (payload_length > capacity_bytes)
     {
-        fprintf(stderr, "Capacidad insuficiente. Max (%s): %zu bytes\n", method_name, cap_bytes);
-        free(payload);
-        free(inbuf);
-        return 1;
+        fprintf(stderr, "Capacidad insuficiente. Max (%s): %zu bytes\n", steg_method_name, capacity_bytes);
+        free(payload_buffer);
+        free(input_buffer);
+        return OPS_CAPACITY_INSUFFICIENT;
     }
 
-    if (embed_fun(bmp->pixels,bmp->pixelsSize, payload, payload_len) != 0)
+    if (selected_embed_function(bmp->pixels, bmp->pixelsSize, payload_buffer, payload_length) != 0)
     {
-        fprintf(stderr, "Fallo embed %s\n",method_name);
-        free(payload);
-        free(inbuf);
-        return 1;
+        fprintf(stderr, "Fallo embed %s\n",steg_method_name);
+        free(payload_buffer);
+        free(input_buffer);
+        return OPS_EMBED_FAILED;
     }
     
-    // Embed using LSB1
-    /*
-    if (lsb1_embed(bmp->pixels, bmp->pixelsSize, payload, payload_len) != 0)
-    {
-        fprintf(stderr, "Fallo embed LSB1\n");
-        free(payload);
-        free(inbuf);
-        return 1;
-    }
-    
-    */
-
     // Write output BMP file
     if (bmp_write(config->out_file, bmp) != 0)
     {
         fprintf(stderr, "No pude escribir BMP de salida\n");
-        free(payload);
-        free(inbuf);
-        return 1;
+        free(payload_buffer);
+        free(input_buffer);
+        return OPS_BMP_WRITE_FAILED;
     }
 
-    free(payload);
-    free(inbuf);
-    printf("OK: incrustado %zu bytes (incluye tamaño y extension)\n", payload_len);
-    return 0;
+    free(payload_buffer);
+    free(input_buffer);
+    printf("OK: incrustado %zu bytes (incluye tamaño y extension)\n", payload_length);
+    return OPS_OK;
 }
 
-int perform_extract(const stegobmp_config_t *config, const Bmp *bmp)
+OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp)
 {
-    extract_func_t extract_func = NULL;
-    char *method_name  = "";
+    extract_func_t selected_extract_function = NULL;
+    const char *steg_method_name  = "";
 
-    switch (config->steg_method)
-    {
-    case STEG_LSB1:
-        extract_func = lsb1_extract;
-        method_name = "LSB1";
-        break;
-    case STEG_LSB4:
-        extract_func = lsb4_extract;
-        method_name = "LSB4";
-        break;
-    case STEG_LSBI:
-        extract_func = lsbi_extract;
-        method_name = "LSBI";
-        break;
-    default:
-        fprintf(stderr, "Invalid Steg Method");
-        return 1;
+    switch (config->steg_method){
+        case STEG_LSB1:
+            selected_extract_function = lsb1_extract;
+            steg_method_name = "LSB1";
+            break;
+        case STEG_LSB4:
+            selected_extract_function = lsb4_extract;
+            steg_method_name = "LSB4";
+            break;
+        case STEG_LSBI:
+            selected_extract_function = lsbi_extract;
+            steg_method_name = "LSBI";
+            break;
+        default:
+            fprintf(stderr, "Invalid Steg Method");
+            return OPS_INVALID_STEG_METHOD;
     }
     
-    uint8_t size_be[4];
-    if (extract_fun(bmp->pixels, bmp->pixelsSize, size_be,4) != 0)
+    uint8_t big_endian_size_header[4];
+    if (selected_extract_function(bmp->pixels, bmp->pixelsSize, big_endian_size_header, 4) != 0)
     {
-        fprinf(stderr,"Fallo extract size %s\n",method_name);
+        fprintf(stderr,"Fallo extract size %s\n", steg_method_name);
+        return OPS_EXTRACT_SIZE_FAILED;
     }
 
-    
-    /*
-    uint8_t size_be[4];
-    if (lsb1_extract(bmp->pixels, bmp->pixelsSize, size_be, 4) != 0)
-    {
-        fprintf(stderr, "Fallo extract size\n");
-        return 1;
-    }
-    uint32_t real_size = be_to_u32(size_be);
+    uint32_t real_data_size = be_to_u32(big_endian_size_header);
+    size_t bytes_remaining_to_read = real_data_size + 16; // margin for extension (".algo\0")
 
-    // Read real_size + extension (unknown until '\0')
-    size_t remaining_bytes = real_size + 16; // margin for extension (".algo\0")
-    uint8_t *tmp = (uint8_t *)malloc(remaining_bytes);
+    uint8_t *temp_buffer = (uint8_t *)malloc(bytes_remaining_to_read);
+    if (!temp_buffer) { return OPS_EXTRACT_ALLOC_FAILED; }
 
-    if (!tmp)
-    {
-        return 1;
-    }
+    uint8_t *full_block_buffer = (uint8_t *)malloc(4 + bytes_remaining_to_read);
+    if (!full_block_buffer){ free(temp_buffer); return OPS_EXTRACT_ALLOC_FAILED; }
 
-    // Extract data+ext from bit offset 32 onwards
-    // Simpler: re-extract everything in sequence
-    uint8_t *all = (uint8_t *)malloc(4 + remaining_bytes);
-    if (!all)
-    {
-        free(tmp);
-        return 1;
-    }
-
-    switch (config->steg_method)
-        {
-            case STEG_LSB1:
-                if (lsb1_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes) != 0)
-                {
-                    fprintf(stderr, "Fallo extract bloque\n");
-                    free(all);
-                    free(tmp);
-                    return 1;
-                }
-                break;
-            case STEG_LSB4:
-                if (lsb4_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes) != 0)
-                {
-                    fprintf(stderr, "Fallo extract LSB4\n");
-                    free(all);
-                    free(tmp);
-                    return 1;
-                }
-                break;
-            case STEG_LSBI:
-                if (lsbi_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes) != 0)
-                {
-                    fprintf(stderr, "Fallo extract LSBI\n");
-                    free(all);
-                    free(tmp);
-                    return 1;
-                }
-                break;
-            default:
-                break;
-        }
-
-
-    if (lsb1_extract(bmp->pixels, bmp->pixelsSize, all, 4 + remaining_bytes) != 0)
-    {
+    if (selected_extract_function(bmp->pixels, bmp->pixelsSize, full_block_buffer, 4 + bytes_remaining_to_read) != 0){
         fprintf(stderr, "Fallo extract bloque\n");
-        free(all);
-        free(tmp);
-        return 1;
+        free(full_block_buffer);
+        free(temp_buffer);
+        return OPS_EXTRACT_BLOCK_FAILED;
     }
 
-    // all: [size(4)] [data ...] [extension...]
-    uint8_t *data_ptr = all + 4;
+    // full_block_buffer: [size(4)] [data ...] [extension...]
+    uint8_t *data_section_ptr = full_block_buffer + 4;
     
     // Find '\0' of extension after the data
-    const char *ext = (const char *)(data_ptr + real_size);
-    size_t ext_found = strnlen(ext, remaining_bytes - real_size);
+    const char *extension_string_ptr = (const char *)(data_section_ptr + real_data_size);
+    size_t extension_length_found = strnlen(extension_string_ptr, bytes_remaining_to_read - real_data_size);
 
-    if (ext_found == remaining_bytes - real_size)
+    if (extension_length_found == bytes_remaining_to_read - real_data_size)
     {
         fprintf(stderr, "No encontre terminador de extension\n");
-        free(all);
-        free(tmp);
-        return 1;
+        free(full_block_buffer);
+        free(temp_buffer);
+        return OPS_EXTENSION_NOT_FOUND;
     }
     
     // Write out_file (data only)
-    if (write_file(config->out_file, data_ptr, real_size) != 0)
+    if (write_file(config->out_file, data_section_ptr, real_data_size) != 0)
     {
         fprintf(stderr, "No pude escribir archivo de salida\n");
-        free(all);
-        free(tmp);
-        return 1;
+        free(full_block_buffer);
+        free(temp_buffer);
+        return OPS_OUTPUT_WRITE_FAILED;
     }
     
-    printf("OK: extraidos %u bytes, extension recuperada: %s\n", real_size, ext);
-    free(all);
-    free(tmp);
-    return 0;
-    */
+    printf("OK: extraidos %u bytes, extension recuperada: %s\n", real_data_size, extension_string_ptr);
+    free(full_block_buffer);
+    free(temp_buffer);
+    return OPS_OK;
 }
-
-/*
-else if (extract) {
-        // extraer primeros 4 bytes (tam real) -> saber cuánto leer
-        uint8_t size_be[4];
-        if ((rc = lsb1_extract(bmp.pixels, bmp.pixelsSize, size_be, 4)) != 0) {
-            fprintf(stderr, "Fallo extract size\n"); 
-            bmp_free(&bmp); 
-            return 1;
-        }
-        uint32_t real_size = be_to_u32(size_be);
-
-        // luego leer real_size + extension (desconocida hasta '\0')
-        size_t head_bits = 4 * 8;
-        size_t remaining_bytes = real_size + 16; // margen para extension (".algo\0")
-        uint8_t *tmp = (uint8_t*)malloc(remaining_bytes);
-
-        if (!tmp) { 
-            bmp_free(&bmp); 
-            return 1; 
-        }
-
-        // extraer datos+ext desde el offset de bits 32 en adelante
-        // más simple: re-extraemos todo seguido
-        uint8_t *all = (uint8_t*)malloc(4 + remaining_bytes);
-        if (!all) { 
-            free(tmp); 
-            bmp_free(&bmp); 
-            return 1; 
-        }
-
-        if ((rc = lsb1_extract(bmp.pixels, bmp.pixelsSize, all, 4 + remaining_bytes)) != 0) {
-            fprintf(stderr, "Fallo extract bloque\n");
-            free(all); 
-            free(tmp); 
-            bmp_free(&bmp); 
-            return 1;
-        }
-        // all: [size(4)] [datos ...] [extension...]
-        uint8_t *data_ptr = all + 4;
-        // buscar '\0' de extensión después de los datos
-        const char *ext = (const char*)(data_ptr + real_size);
-        size_t ext_found = strnlen(ext, remaining_bytes - real_size);
-
-        if (ext_found == remaining_bytes - real_size) {
-            fprintf(stderr, "No encontre terminador de extension\n");
-            free(all); 
-            free(tmp); 
-            bmp_free(&bmp); 
-            return 1;
-        }
-        // escribir out_file (solo datos)
-        if (write_file(out_file, data_ptr, real_size) != 0) {
-            fprintf(stderr, "No pude escribir archivo de salida\n");
-            free(all); 
-            free(tmp); 
-            bmp_free(&bmp); 
-            return 1;
-        }
-        printf("OK: extraidos %u bytes, extension recuperada: %s\n", real_size, ext);
-        free(all); 
-        free(tmp);
-    }
-
-    bmp_free(&bmp);
-    return 0;
-}*/
