@@ -8,7 +8,7 @@
 #include "../../lsbi/lsbi.h"
 #include "../file_management/file_management.h"
 #include "../translator/translator.h"
-#include "../encryption_manager/encryption_manager.h"
+#include "../../encryption_manager/encryption_manager.h"
 #include "operations.h"
 
 OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)

@@ -278,3 +278,50 @@ bool is_encryption_enabled(const stegobmp_config_t *config)
            strlen(config->password) > 0;
 }
 
+char* get_encryption_description(const stegobmp_config_t *config, char *buffer, size_t buffer_size)
+{
+    if (!config || !buffer || buffer_size == 0) {
+        return NULL;
+    }
+    
+    if (!is_encryption_enabled(config)) {
+        snprintf(buffer, buffer_size, "Ninguna");
+        return buffer;
+    }
+    
+    const char *algo_str = encryption_algo_to_string(config->encryption_algo);
+    const char *mode_str = encryption_mode_to_string(config->encryption_mode);
+    
+    // Format: "AES128-CBC" (uppercase algorithm, uppercase mode)
+    // Convert to uppercase format for display
+    if (strcmp(algo_str, "aes128") == 0) {
+        snprintf(buffer, buffer_size, "AES128-%s", 
+                 strcmp(mode_str, "ecb") == 0 ? "ECB" :
+                 strcmp(mode_str, "cbc") == 0 ? "CBC" :
+                 strcmp(mode_str, "cfb") == 0 ? "CFB" :
+                 strcmp(mode_str, "ofb") == 0 ? "OFB" : mode_str);
+    } else if (strcmp(algo_str, "aes192") == 0) {
+        snprintf(buffer, buffer_size, "AES192-%s",
+                 strcmp(mode_str, "ecb") == 0 ? "ECB" :
+                 strcmp(mode_str, "cbc") == 0 ? "CBC" :
+                 strcmp(mode_str, "cfb") == 0 ? "CFB" :
+                 strcmp(mode_str, "ofb") == 0 ? "OFB" : mode_str);
+    } else if (strcmp(algo_str, "aes256") == 0) {
+        snprintf(buffer, buffer_size, "AES256-%s",
+                 strcmp(mode_str, "ecb") == 0 ? "ECB" :
+                 strcmp(mode_str, "cbc") == 0 ? "CBC" :
+                 strcmp(mode_str, "cfb") == 0 ? "CFB" :
+                 strcmp(mode_str, "ofb") == 0 ? "OFB" : mode_str);
+    } else if (strcmp(algo_str, "3des") == 0) {
+        snprintf(buffer, buffer_size, "3DES-%s",
+                 strcmp(mode_str, "ecb") == 0 ? "ECB" :
+                 strcmp(mode_str, "cbc") == 0 ? "CBC" :
+                 strcmp(mode_str, "cfb") == 0 ? "CFB" :
+                 strcmp(mode_str, "ofb") == 0 ? "OFB" : mode_str);
+    } else {
+        snprintf(buffer, buffer_size, "%s-%s", algo_str, mode_str);
+    }
+    
+    return buffer;
+}
+
