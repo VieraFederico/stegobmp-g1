@@ -62,6 +62,9 @@ gcc -Wall -Wextra -O2 -c src/utils/translator/translator.c -o src/utils/translat
 echo -e "${WHITE}   operations.c${NC}"
 gcc -Wall -Wextra -O2 -c src/utils/operations/operations.c -o src/utils/operations/operations.o
 
+echo -e "${WHITE}   encryption_manager.c${NC}"
+gcc -Wall -Wextra -O2 -c src/encryption_manager/encryption_manager.c -o src/encryption_manager/encryption_manager.o
+
 echo ""
 echo -e "${PURPLE} Linking everything together...${NC}"
 
@@ -76,6 +79,7 @@ gcc -Wall -Wextra -O2 -o stegobmp \
     src/utils/parser/parser.o \
     src/utils/translator/translator.o \
     src/utils/operations/operations.o \
+    src/encryption_manager/encryption_manager.o \
     -lssl -lcrypto
 
 echo ""
