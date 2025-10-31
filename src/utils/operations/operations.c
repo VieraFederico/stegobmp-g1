@@ -47,6 +47,9 @@ OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
     memcpy(payload_buffer + 4, input_buffer, input_length);
     memcpy(payload_buffer + 4 + input_length, extension_buffer, extension_length);
 
+    //Enc
+    
+
     embed_func_t selected_embed_function = NULL;
     const char *steg_method_name = "";
     size_t pixel_bytes_per_data_byte = 0;
@@ -86,6 +89,8 @@ OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
         return OPS_CAPACITY_INSUFFICIENT;
     }
 
+ 
+
     if (selected_embed_function(bmp->pixels, bmp->pixelsSize, payload_buffer, payload_length) != 0)
     {
         fprintf(stderr, "Fallo embed %s\n",steg_method_name);
@@ -94,6 +99,7 @@ OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
         return OPS_EMBED_FAILED;
     }
     
+
     // Write output BMP file
     if (bmp_write(config->out_file, bmp) != 0)
     {
@@ -147,6 +153,8 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
 
     uint8_t *full_block_buffer = (uint8_t *)malloc(4 + bytes_remaining_to_read);
     if (!full_block_buffer){ free(temp_buffer); return OPS_EXTRACT_ALLOC_FAILED; }
+
+    //DEC
 
     if (selected_extract_function(bmp->pixels, bmp->pixelsSize, full_block_buffer, 4 + bytes_remaining_to_read) != 0){
         fprintf(stderr, "Fallo extract bloque\n");
