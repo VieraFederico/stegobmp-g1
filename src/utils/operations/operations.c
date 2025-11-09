@@ -238,16 +238,6 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
     
     printf("Tamaño del bloque: %u bytes\n", data_size);
     
-    // Validate size - it should be reasonable (not larger than available pixels)
-    // For LSBI, we need to account for the fact that it uses 2 channels per pixel (G and B)
-    // and reserves 4 pixels for the map
-    size_t max_reasonable_size = bmp->pixelsSize;
-    if (data_size > max_reasonable_size) {
-        fprintf(stderr, "Error: Tamaño del bloque invalido (%u bytes) excede capacidad disponible (%zu bytes)\n", 
-                data_size, max_reasonable_size);
-        return OPS_EXTRACT_BLOCK_FAILED;
-    }
-    
     // Extract the full data block (size + data)
     uint8_t *full_block_buffer = (uint8_t *)malloc(4 + data_size);
     if (!full_block_buffer)
