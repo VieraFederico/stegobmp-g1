@@ -1,3 +1,4 @@
 *.o
 *.bmp
 stegobmp
+/ejemplo*
