@@ -238,6 +238,16 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
     
     printf("Tamaño del bloque: %u bytes\n", data_size);
     
+    // Validate size - it should be reasonable (not larger than available pixels)
+    // For LSBI, we need to account for the fact that it uses 2 channels per pixel (G and B)
+    // and reserves 4 pixels for the map
+    size_t max_reasonable_size = bmp->pixelsSize;
+    if (data_size > max_reasonable_size) {
+        fprintf(stderr, "Error: Tamaño del bloque invalido (%u bytes) excede capacidad disponible (%zu bytes)\n", 
+                data_size, max_reasonable_size);
+        return OPS_EXTRACT_BLOCK_FAILED;
+    }
+    
     // Extract the full data block (size + data)
     uint8_t *full_block_buffer = (uint8_t *)malloc(4 + data_size);
     if (!full_block_buffer)
@@ -334,38 +344,22 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
     }
     else
     {
-        // No encryption - parse directly: tamaño real || datos archivo || extensión
-        if (data_size < 4)
-        {
-            fprintf(stderr, "Error: Datos extraidos demasiado cortos\n");
-            free(full_block_buffer);
-            return OPS_EXTRACT_BLOCK_FAILED;
-        }
-
-        uint32_t real_data_size = be_to_u32(extracted_data);
+        // No encryption
+        // Format embedded: [size(4)] [file_data] [.ext\0]
         
-        if (data_size < 4 + real_data_size)
-        {
-            fprintf(stderr, "Error: Datos extraidos incompletos\n");
-            free(full_block_buffer);
-            return OPS_EXTRACT_BLOCK_FAILED;
-        }
-
-        uint8_t *file_data = extracted_data + 4;
+        uint32_t real_data_size = data_size;
+        uint8_t *file_data = extracted_data;
         const char *extension_string_ptr = (const char *)(file_data + real_data_size);
         
-        // Find extension terminator
-        size_t max_ext_search = data_size - 4 - real_data_size;
-        size_t extension_length = strnlen(extension_string_ptr, max_ext_search);
+        size_t extension_length = strnlen(extension_string_ptr, 16);
 
-        if (extension_length == max_ext_search)
+        if (extension_length == 16)
         {
             fprintf(stderr, "Error: No encontre terminador de extension\n");
             free(full_block_buffer);
             return OPS_EXTENSION_NOT_FOUND;
         }
 
-        // Write output file (data only)
         if (write_file(config->out_file, file_data, real_data_size) != 0)
         {
             fprintf(stderr, "Error: No pude escribir archivo de salida '%s'\n", config->out_file);
@@ -373,7 +367,6 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
             return OPS_OUTPUT_WRITE_FAILED;
         }
 
-        // Success message
         printf("\n=== EXITO ===\n");
         printf("Archivo extraido: '%s' (%u bytes)\n", config->out_file, real_data_size);
         printf("Extension recuperada: %s\n", extension_string_ptr);
