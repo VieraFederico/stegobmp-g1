@@ -3,105 +3,178 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define PATTERN_MAP_SIZE 4
+
+// Helper: Check if a pixel index corresponds to GREEN or BLUE component
+// BMP format is BGR: index % 3 == 0 (Blue), 1 (Green), 2 (Red)
+// We only use Blue (0) and Green (1), skip Red (2)
+static inline int is_green_or_blue(size_t index) {
+    return (index % 3) != 2; // Skip Red components (index % 3 == 2)
+}
+
+// Get the next GREEN or BLUE component index starting from a given offset
+static inline size_t get_next_gb_index(size_t start) {
+    while ((start % 3) == 2) start++; // Skip Red components
+    return start;
+}
+
 // patrón = bits 1..2 (contando bit0 como LSB). 00->0, 01->1, 10->2, 11->3
 static inline unsigned pattern_from_byte(uint8_t b) {
-    unsigned b1 = (b >> 1) & 1u;
-    unsigned b2 = (b >> 2) & 1u;
-    return (b2 << 1) | b1;
-}
-
-// Lee flags (4 bits) guardados en los LSB de los primeros 4 bytes del bloque de píxeles
-static inline void lsbi_read_flags(const uint8_t *pixels, uint8_t inv[4]) {
-    inv[0] = pixels[0] & 1u; // patrón 00
-    inv[1] = pixels[1] & 1u; // patrón 01
-    inv[2] = pixels[2] & 1u; // patrón 10
-    inv[3] = pixels[3] & 1u; // patrón 11
-}
-
-// Escribe flags (en orden 00,01,10,11) en los LSB de los primeros 4 bytes
-static inline void lsbi_write_flags(uint8_t *pixels, const uint8_t inv[4]) {
-    for (int p = 0; p < 4; ++p)
-        pixels[p] = (uint8_t)((pixels[p] & 0xFE) | (inv[p] & 1u));
+    return (b >> 1) & 0x03;
 }
 
 int lsbi_embed(uint8_t *pixels, size_t pixels_len, const uint8_t *data, size_t data_len) {
     if (!pixels || !data) return -1;
 
-    // bits necesarios: 4 (mapa) + payload*8
-    const size_t used_bytes = data_len * 8;
-    const size_t bits_needed = 4 + used_bytes;
-    if (pixels_len < bits_needed) return -1;
+    const size_t num_bits = data_len * 8;
+    const size_t bits_needed = PATTERN_MAP_SIZE + num_bits;
+    
+    // We need enough GREEN/BLUE components (approximately 2/3 of pixels_len)
+    // Reserve first 4 GREEN/BLUE components for pattern_map
+    size_t component_index = get_next_gb_index(PATTERN_MAP_SIZE);
+    size_t bit_to_embed_count = 0;
+    
+    // Count how many GREEN/BLUE components we have available
+    size_t available_gb_components = 0;
+    for (size_t i = 0; i < pixels_len; i++) {
+        if (is_green_or_blue(i)) available_gb_components++;
+    }
+    
+    if (available_gb_components < bits_needed) return -1;
 
-    // Guardamos copia de los bytes que vamos a tocar para contar cambios
-    uint8_t *orig = (uint8_t*)malloc(used_bytes);
-    if (!orig) return -2;
-    memcpy(orig, pixels + 4, used_bytes);
+    // Store original values for pattern counting
+    size_t max_components_needed = component_index + num_bits;
+    uint8_t *orig_values = (uint8_t*)malloc(num_bits);
+    if (!orig_values) return -2;
+    
+    size_t orig_idx = 0;
+    for (size_t i = component_index; i < pixels_len && bit_to_embed_count < num_bits; i++) {
+        if (!is_green_or_blue(i)) continue;
+        orig_values[orig_idx++] = pixels[i];
+        bit_to_embed_count++;
+    }
+    
+    if (bit_to_embed_count < num_bits) {
+        free(orig_values);
+        return -1;
+    }
 
-    // Paso 1: LSB1 "plano" desde offset 4 (reservamos 0..3 para el mapa)
-    size_t bit_idx = 0;
-    for (size_t i = 0; i < data_len; ++i) {
-        for (int b = 7; b >= 0; --b) {
-            const uint8_t bit = (data[i] >> b) & 1u;
-            const size_t px = 4 + bit_idx;
-            pixels[px] = (uint8_t)((pixels[px] & 0xFE) | bit);
-            ++bit_idx;
+    // Reset for actual embedding
+    component_index = get_next_gb_index(PATTERN_MAP_SIZE);
+    bit_to_embed_count = 0;
+    size_t pattern_changed[4] = {0, 0, 0, 0};
+    size_t pattern_unchanged[4] = {0, 0, 0, 0};
+    orig_idx = 0;
+
+    // Paso 1: Insertar datos usando LSB1 y contar cambios
+    for (; component_index < pixels_len && bit_to_embed_count < num_bits; component_index++) {
+        if (!is_green_or_blue(component_index)) continue;
+        
+        uint8_t original_component = pixels[component_index];
+        uint8_t pattern = pattern_from_byte(original_component);
+        uint8_t bit = (data[bit_to_embed_count / 8] >> (7 - (bit_to_embed_count % 8))) & 0x01;
+        
+        pixels[component_index] = (original_component & 0xFE) | bit;
+        
+        if (pixels[component_index] != original_component) {
+            pattern_changed[pattern]++;
+        } else {
+            pattern_unchanged[pattern]++;
+        }
+        
+        bit_to_embed_count++;
+    }
+
+    // Paso 2: Construir pattern_map
+    // Los bits se almacenan en orden inverso: bit 3 (pattern 0) primero, bit 0 (pattern 3) último
+    uint8_t pattern_map = 0;
+    for (int p = 0; p < 4; p++) {
+        if (pattern_changed[p] > pattern_unchanged[p]) {
+            pattern_map |= (1 << (3 - p)); // Almacenar en orden inverso para coincidir con extract
         }
     }
 
-    // Paso 2: contar cambios por patrón (comparando LSB antes vs después)
-    size_t changed[4]   = {0,0,0,0};
-    size_t unchanged[4] = {0,0,0,0};
-    for (size_t i = 0; i < used_bytes; ++i) {
-        const uint8_t before = orig[i];
-        const uint8_t after  = pixels[4 + i];
-        const unsigned p = pattern_from_byte(before);
-        if ((before & 1u) != (after & 1u)) changed[p]++; else unchanged[p]++;
+    // Paso 3: Embeber pattern_map en los primeros 4 componentes GREEN/BLUE usando LSB1
+    size_t pattern_map_offset = 0;
+    size_t pattern_map_bits_embedded = 0;
+    for (size_t i = 0; i < pixels_len && pattern_map_bits_embedded < PATTERN_MAP_SIZE; i++) {
+        if (!is_green_or_blue(i)) continue;
+        
+        uint8_t bit = (pattern_map >> (3 - pattern_map_bits_embedded)) & 0x01;
+        pixels[i] = (pixels[i] & 0xFE) | bit;
+        pattern_map_bits_embedded++;
     }
 
-    // Paso 3: decidir inversión para cada patrón
-    uint8_t invert[4] = {0,0,0,0};
-    for (int p = 0; p < 4; ++p)
-        if (changed[p] > unchanged[p]) invert[p] = 1;
-
-    // Paso 4: aplicar inversión (flip LSB) donde corresponda
-    for (size_t i = 0; i < used_bytes; ++i) {
-        const unsigned p = pattern_from_byte(orig[i]);
-        if (invert[p]) pixels[4 + i] ^= 1u;
+    // Paso 4: Aplicar inversión de LSB según pattern_map
+    component_index = get_next_gb_index(PATTERN_MAP_SIZE);
+    bit_to_embed_count = 0;
+    
+    for (; component_index < pixels_len && bit_to_embed_count < num_bits; component_index++) {
+        if (!is_green_or_blue(component_index)) continue;
+        
+        uint8_t pattern = pattern_from_byte(pixels[component_index]);
+        uint8_t desired_bit = (data[bit_to_embed_count / 8] >> (7 - (bit_to_embed_count % 8))) & 0x01;
+        uint8_t current_bit = pixels[component_index] & 0x01;
+        
+        // Solo invertir si el patrón está marcado y el LSB actualmente no coincide
+        if ((pattern_map & (1 << (3 - pattern))) && (current_bit != desired_bit)) {
+            pixels[component_index] ^= 0x01;
+        }
+        
+        bit_to_embed_count++;
     }
 
-    // Paso 5: escribir el mapa de 4 bits en los 4 primeros bytes
-    lsbi_write_flags(pixels, invert);
-
-    free(orig);
+    free(orig_values);
     return 0;
 }
 
 int lsbi_extract(const uint8_t *pixels, size_t pixels_len, uint8_t *out, size_t data_len) {
     if (!pixels || !out) return -1;
 
-    const size_t bits_needed = 4 + data_len * 8;
-    if (pixels_len < bits_needed) return -1;
+    const size_t num_bits = data_len * 8;
+    const size_t bits_needed = PATTERN_MAP_SIZE + num_bits;
+    
+    // Initialize output buffer
+    memset(out, 0, data_len);
 
-    uint8_t invert[4];
-    lsbi_read_flags(pixels, invert);
-
-    // El payload arranca en el byte índice 4 (porque 0..3 guardan el mapa)
-    const size_t start_bit = 4;
-
-    size_t bit_idx = 0;
-    for (size_t i = 0; i < data_len; ++i) {
-        uint8_t v = 0;
-        for (int b = 7; b >= 0; --b) {
-            const size_t px = start_bit + bit_idx; // índice de byte del bloque de píxeles
-            uint8_t byte = pixels[px];
-            unsigned p = pattern_from_byte(byte); // bits 1..2 no los tocamos, sirven para clasificar
-            uint8_t lsb = (uint8_t)(byte & 1u);
-            if (invert[p]) lsb ^= 1u;            // deshacer inversión
-            v |= (uint8_t)(lsb << b);
-            ++bit_idx;
-        }
-        out[i] = v;
+    // Paso 1: Leer pattern_map de los primeros 4 componentes GREEN/BLUE
+    uint8_t pattern_map = 0;
+    size_t pattern_map_bits_read = 0;
+    for (size_t i = 0; i < pixels_len && pattern_map_bits_read < PATTERN_MAP_SIZE; i++) {
+        if (!is_green_or_blue(i)) continue;
+        
+        uint8_t bit = pixels[i] & 0x01;
+        pattern_map |= (bit << (3 - pattern_map_bits_read));
+        pattern_map_bits_read++;
     }
+
+    // Paso 2: Extraer los datos embebidos
+    size_t component_index = get_next_gb_index(PATTERN_MAP_SIZE);
+    size_t bit_extracted_count = 0;
+
+    for (; component_index < pixels_len && bit_extracted_count < num_bits; component_index++) {
+        if (!is_green_or_blue(component_index)) continue;
+        
+        uint8_t component = pixels[component_index];
+        uint8_t pattern = pattern_from_byte(component);
+        
+        // Verificar si este patrón fue invertido usando el pattern_map
+        if ((pattern_map & (1 << (3 - pattern))) != 0) {
+            component ^= 0x01;  // Invertir el LSB
+        }
+        
+        // Extraer el LSB y almacenar en el buffer
+        uint8_t bit = component & 0x01;
+        out[bit_extracted_count / 8] |= (bit << (7 - (bit_extracted_count % 8)));
+        
+        bit_extracted_count++;
+    }
+
+    // Verificar que se hayan extraído todos los bits
+    if (bit_extracted_count != num_bits) {
+        return -1;
+    }
+
     return 0;
 }
 
