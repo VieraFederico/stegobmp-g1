@@ -1,40 +1,65 @@
 #include "lsb1.h"
+#include "../common/bmp_image.h"
 #include <stdio.h>
-int lsb1_embed(uint8_t *pixels, size_t pixels_len, const uint8_t *data, size_t data_len) {
-    size_t bits_needed = data_len * 8;
+#include <string.h>
 
-    if (pixels_len < bits_needed) 
+int lsb1_embed(BMPImage *bmp, const uint8_t *data, size_t num_bits, size_t *offset) {
+    if (bmp == NULL || bmp->data == NULL || data == NULL || offset == NULL) {
         return -1;
-
-    size_t bit_idx = 0;
-
-    for (size_t i = 0; i < data_len; i++) {
-        for (int b = 7; b >= 0; --b) {
-            uint8_t bit = (data[i] >> b) & 1u;
-            // escribir bit en LSB del byte de pixel correspondiente
-            pixels[bit_idx] = (uint8_t)((pixels[bit_idx] & 0xFE) | bit);
-            bit_idx++;
-        }
     }
+
+    size_t component_index = *offset;
+    size_t bit_index = 0;
+    size_t max_component_index = bmp->width * bmp->height * 3;
+
+    for (; bit_index < num_bits && component_index < max_component_index; bit_index++) {
+        Component comp = get_component_by_index(bmp, component_index++);
+        if (comp.component_ptr == NULL) {
+            return -1;
+        }
+
+        uint8_t byte = data[bit_index / 8];
+        size_t bit_position = 7 - (bit_index % 8);
+        uint8_t bit = (byte >> bit_position) & 0x01;
+
+        *comp.component_ptr = (*comp.component_ptr & 0xFE) | bit;
+    }
+
+    if (bit_index != num_bits) {
+        return -1;
+    }
+
+    *offset = component_index;
     return 0;
 }
 
-int lsb1_extract(const uint8_t *pixels, size_t pixels_len, uint8_t *out, size_t data_len) {
-    size_t bits_needed = data_len * 8;
-
-    if (pixels_len < bits_needed) 
+int lsb1_extract(const BMPImage *bmp, size_t num_bits, uint8_t *buffer, size_t *offset, void *context) {
+    if (bmp == NULL || bmp->data == NULL || buffer == NULL || offset == NULL) {
         return -1;
-
-    size_t bit_idx = 0;
-    
-    for (size_t i = 0; i < data_len; i++) {
-        uint8_t v = 0;
-        for (int b = 7; b >= 0; --b) {
-            uint8_t bit = (uint8_t)(pixels[bit_idx] & 1u);
-            v |= (bit << b);
-            bit_idx++;
-        }
-        out[i] = v;
     }
+
+    memset(buffer, 0, (num_bits + 7) / 8);
+
+    size_t component_index = *offset;
+    size_t bit_index = 0;
+    size_t max_component_index = bmp->width * bmp->height * 3;
+
+    for (; bit_index < num_bits && component_index < max_component_index; component_index++) {
+        Component comp = get_component_by_index(bmp, component_index);
+        if (comp.component_ptr == NULL) {
+            return -1;
+        }
+
+        uint8_t bit = *comp.component_ptr & 0x01;
+        size_t bit_position = 7 - (bit_index % 8);
+        buffer[bit_index / 8] |= (bit << bit_position);
+        bit_index++;
+    }
+
+    if (bit_index != num_bits) {
+        return -1;
+    }
+
+    *offset = component_index;
     return 0;
 }

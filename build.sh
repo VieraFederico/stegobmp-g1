@@ -39,16 +39,19 @@ echo -e "${WHITE}   main.c${NC}"
 gcc -Wall -Wextra -O2 -c src/main.c -o src/main.o
 
 echo -e "${WHITE}   bmp_handler.c${NC}"
-gcc -Wall -Wextra -O2 -c src/bmp_handler/bmp_handler.c -o src/bmp_handler/bmp_handler.o
+gcc -Wall -Wextra -O2 -Isrc -Isrc/bmp_handler -Isrc/common -c src/bmp_handler/bmp_handler.c -o src/bmp_handler/bmp_handler.o
+
+echo -e "${WHITE}   bmp_image.c${NC}"
+gcc -Wall -Wextra -O2 -Isrc -Isrc/bmp_handler -Isrc/common -c src/common/bmp_image.c -o src/common/bmp_image.o
 
 echo -e "${WHITE}   lsb1.c${NC}"
-gcc -Wall -Wextra -O2 -c src/lsb1/lsb1.c -o src/lsb1/lsb1.o
+gcc -Wall -Wextra -O2 -Isrc -Isrc/bmp_handler -Isrc/common -Isrc/lsb1 -c src/lsb1/lsb1.c -o src/lsb1/lsb1.o
 
 echo -e "${WHITE}   lsb4.c${NC}"
-gcc -Wall -Wextra -O2 -c src/lsb4/lsb4.c -o src/lsb4/lsb4.o
+gcc -Wall -Wextra -O2 -Isrc -Isrc/bmp_handler -Isrc/common -Isrc/lsb4 -c src/lsb4/lsb4.c -o src/lsb4/lsb4.o
 
 echo -e "${WHITE}   lsbi.c${NC}"
-gcc -Wall -Wextra -O2 -c src/lsbi/lsbi.c -o src/lsbi/lsbi.o
+gcc -Wall -Wextra -O2 -Isrc -Isrc/bmp_handler -Isrc/common -Isrc/lsbi -Isrc/lsb1 -c src/lsbi/lsbi.c -o src/lsbi/lsbi.o
 
 echo -e "${WHITE}   file_management.c${NC}"
 gcc -Wall -Wextra -O2 -c src/utils/file_management/file_management.c -o src/utils/file_management/file_management.o
@@ -60,10 +63,10 @@ echo -e "${WHITE}   translator.c${NC}"
 gcc -Wall -Wextra -O2 -c src/utils/translator/translator.c -o src/utils/translator/translator.o
 
 echo -e "${WHITE}   operations.c${NC}"
-gcc -Wall -Wextra -O2 -c src/utils/operations/operations.c -o src/utils/operations/operations.o
+gcc -Wall -Wextra -O2 -Isrc -Isrc/bmp_handler -Isrc/common -Isrc/lsb1 -Isrc/lsb4 -Isrc/lsbi -Isrc/utils/operations -Isrc/utils/parser -Isrc/utils/file_management -Isrc/utils/translator -Isrc/encryption_manager -c src/utils/operations/operations.c -o src/utils/operations/operations.o
 
 echo -e "${WHITE}   encryption_manager.c${NC}"
-gcc -Wall -Wextra -O2 -c src/encryption_manager/encryption_manager.c -o src/encryption_manager/encryption_manager.o
+gcc -Wall -Wextra -O2 -Isrc -Isrc/encryption_manager -c src/encryption_manager/encryption_manager.c -o src/encryption_manager/encryption_manager.o
 
 echo ""
 echo -e "${PURPLE} Linking everything together...${NC}"
@@ -72,6 +75,7 @@ echo -e "${PURPLE} Linking everything together...${NC}"
 gcc -Wall -Wextra -O2 -o stegobmp \
     src/main.o \
     src/bmp_handler/bmp_handler.o \
+    src/common/bmp_image.o \
     src/lsb1/lsb1.o \
     src/lsb4/lsb4.o \
     src/lsbi/lsbi.o \

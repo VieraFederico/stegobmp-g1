@@ -9,7 +9,8 @@ SRCDIR       := src
 PROD_SRCS := $(wildcard $(SRCDIR)/*.c) \
              $(wildcard $(SRCDIR)/*/*.c) \
              $(wildcard $(SRCDIR)/*/*/*.c) \
-             $(wildcard $(SRCDIR)/*/*/*/*.c)
+             $(wildcard $(SRCDIR)/*/*/*/*.c) \
+             $(SRCDIR)/common/bmp_image.c
 
 TEST_SRCS    := $(filter %_test.c,$(PROD_SRCS))
 PROD_SRCS    := $(filter-out $(TEST_SRCS),$(PROD_SRCS))

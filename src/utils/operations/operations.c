@@ -3,13 +3,33 @@
 #include <string.h>
 #include <stdint.h>
 #include "../../bmp_handler/bmp_handler.h"
+#include "../../common/bmp_image.h"
 #include "../../lsb1/lsb1.h"
 #include "../../lsb4/lsb4.h"
 #include "../../lsbi/lsbi.h"
+
+#define PATTERN_MAP_SIZE 4
 #include "../file_management/file_management.h"
 #include "../translator/translator.h"
 #include "../../encryption_manager/encryption_manager.h"
 #include "operations.h"
+
+// Helper function to convert Bmp to BMPImage
+static int convert_bmp_to_bmpimage(const Bmp *bmp, BMPImage *bmpimg) {
+    if (bmp == NULL || bmpimg == NULL) return -1;
+    
+    // Copy header (combine fileHeader and infoHeader into 54-byte header)
+    memcpy(bmpimg->header, &bmp->fileHeader, 14);
+    memcpy(bmpimg->header + 14, &bmp->infoHeader, 40);
+    
+    // Copy pixel data (reference, not copy - we'll modify in place)
+    bmpimg->data = bmp->pixels;
+    bmpimg->data_size = bmp->pixelsSize;
+    bmpimg->width = (size_t)(bmp->infoHeader.biWidth > 0 ? bmp->infoHeader.biWidth : -bmp->infoHeader.biWidth);
+    bmpimg->height = (size_t)(bmp->infoHeader.biHeight > 0 ? bmp->infoHeader.biHeight : -bmp->infoHeader.biHeight);
+    
+    return 0;
+}
 
 OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
 {
@@ -104,26 +124,33 @@ OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
         needs_free_final = false;
     }
 
+    // Convert Bmp to BMPImage
+    BMPImage bmpimg;
+    if (convert_bmp_to_bmpimage(bmp, &bmpimg) != 0) {
+        fprintf(stderr, "Error: Fallo conversion BMP\n");
+        if (needs_free_final) free(final_payload);
+        free(unencrypted_payload);
+        free(input_buffer);
+        return OPS_EMBED_FAILED;
+    }
+
     // Select steganography method
-    embed_func_t selected_embed_function = NULL;
     const char *steg_method_name = "";
     size_t pixel_bytes_per_data_byte = 0;
+    size_t num_bits = final_payload_length * 8;
 
     switch (config->steg_method)
     {
         case STEG_LSB1:
-            selected_embed_function = lsb1_embed;
             pixel_bytes_per_data_byte = 8;
             steg_method_name = "LSB1";
             break;
         case STEG_LSB4:
-            selected_embed_function = lsb4_embed;
             pixel_bytes_per_data_byte = 2; 
             steg_method_name = "LSB4";
             break;
         case STEG_LSBI:
-            selected_embed_function = lsbi_embed;
-            pixel_bytes_per_data_byte = 8;
+            pixel_bytes_per_data_byte = 2;
             steg_method_name = "LSBI";
             break;
         default:
@@ -150,7 +177,23 @@ OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
 
     // Perform embedding
     printf("Incrustando con %s...\n", steg_method_name);
-    if (selected_embed_function(bmp->pixels, bmp->pixelsSize, final_payload, final_payload_length) != 0)
+    size_t offset = 0;
+    int embed_result = 0;
+    
+    switch (config->steg_method)
+    {
+        case STEG_LSB1:
+            embed_result = lsb1_embed(&bmpimg, final_payload, num_bits, &offset);
+            break;
+        case STEG_LSB4:
+            embed_result = lsb4_embed(&bmpimg, final_payload, num_bits, &offset);
+            break;
+        case STEG_LSBI:
+            embed_result = lsbi_embed(&bmpimg, final_payload, num_bits, &offset);
+            break;
+    }
+    
+    if (embed_result != 0)
     {
         fprintf(stderr, "Error: Fallo embed %s\n", steg_method_name);
         if (needs_free_final) free(final_payload);
@@ -201,23 +244,33 @@ OperationsResult perform_embed(const stegobmp_config_t *config, const Bmp *bmp)
 
 OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp)
 {
+    // Convert Bmp to BMPImage
+    BMPImage bmpimg;
+    if (convert_bmp_to_bmpimage(bmp, &bmpimg) != 0) {
+        fprintf(stderr, "Error: Fallo conversion BMP\n");
+        return OPS_EXTRACT_SIZE_FAILED;
+    }
+
     // Select extraction method
-    extract_func_t selected_extract_function = NULL;
     const char *steg_method_name = "";
+    uint8_t pattern_map = 0;
+    size_t offset = 0;
 
     switch (config->steg_method)
     {
         case STEG_LSB1:
-            selected_extract_function = lsb1_extract;
             steg_method_name = "LSB1";
             break;
         case STEG_LSB4:
-            selected_extract_function = lsb4_extract;
             steg_method_name = "LSB4";
             break;
         case STEG_LSBI:
-            selected_extract_function = lsbi_extract;
             steg_method_name = "LSBI";
+            // Si el algoritmo es LSBI, primero extraer el pattern_map usando LSB1 (TODOS los componentes)
+            if (lsb1_extract(&bmpimg, PATTERN_MAP_SIZE, &pattern_map, &offset, NULL) != 0) {
+                fprintf(stderr, "Error: Fallo al extraer pattern_map con LSB1\n");
+                return OPS_EXTRACT_SIZE_FAILED;
+            }
             break;
         default:
             fprintf(stderr, "Error: Metodo de esteganografia invalido\n");
@@ -226,9 +279,24 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
     
     printf("Extrayendo con %s...\n", steg_method_name);
     
-    // Extract size header (first 4 bytes)
+    // Extract size header (first 4 bytes = 32 bits)
     uint8_t big_endian_size_header[4];
-    if (selected_extract_function(bmp->pixels, bmp->pixelsSize, big_endian_size_header, 4) != 0)
+    int extract_result = 0;
+    
+    switch (config->steg_method)
+    {
+        case STEG_LSB1:
+            extract_result = lsb1_extract(&bmpimg, 32, big_endian_size_header, &offset, NULL);
+            break;
+        case STEG_LSB4:
+            extract_result = lsb4_extract(&bmpimg, 32, big_endian_size_header, &offset, NULL);
+            break;
+        case STEG_LSBI:
+            extract_result = lsbi_extract(&bmpimg, 32, big_endian_size_header, &offset, &pattern_map);
+            break;
+    }
+    
+    if (extract_result != 0)
     {
         fprintf(stderr, "Error: Fallo al extraer cabecera de tamaño con %s\n", steg_method_name);
         return OPS_EXTRACT_SIZE_FAILED;
@@ -248,23 +316,36 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
         return OPS_EXTRACT_BLOCK_FAILED;
     }
     
-    // Extract the full data block (size + data)
-    uint8_t *full_block_buffer = (uint8_t *)malloc(4 + data_size);
-    if (!full_block_buffer)
+    // Extract the data block (data_size bytes = data_size * 8 bits)
+    uint8_t *extracted_data = (uint8_t *)malloc(data_size);
+    if (!extracted_data)
     {
         fprintf(stderr, "Error: No pude asignar memoria para extraccion\n");
         return OPS_EXTRACT_ALLOC_FAILED;
     }
 
-    if (selected_extract_function(bmp->pixels, bmp->pixelsSize, full_block_buffer, 4 + data_size) != 0)
+    extract_result = 0;
+    switch (config->steg_method)
+    {
+        case STEG_LSB1:
+            extract_result = lsb1_extract(&bmpimg, data_size * 8, extracted_data, &offset, NULL);
+            break;
+        case STEG_LSB4:
+            extract_result = lsb4_extract(&bmpimg, data_size * 8, extracted_data, &offset, NULL);
+            break;
+        case STEG_LSBI:
+            extract_result = lsbi_extract(&bmpimg, data_size * 8, extracted_data, &offset, &pattern_map);
+            break;
+    }
+
+    if (extract_result != 0)
     {
         fprintf(stderr, "Error: Fallo al extraer bloque de datos\n");
-        free(full_block_buffer);
+        free(extracted_data);
         return OPS_EXTRACT_BLOCK_FAILED;
     }
 
-    // full_block_buffer: [size(4)] [data ...]
-    uint8_t *extracted_data = full_block_buffer + 4;
+    // extracted_data: [data ...]
     
     // Check if decryption is needed
     if (is_encryption_enabled(config))
@@ -282,7 +363,7 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
         {
             fprintf(stderr, "Error: Fallo la desencriptacion\n");
             fprintf(stderr, "       (Verifica la password y los parametros)\n");
-            free(full_block_buffer);
+            free(extracted_data);
             return OPS_DECRYPTION_FAILED;
         }
 
@@ -293,7 +374,7 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
         {
             fprintf(stderr, "Error: Datos desencriptados demasiado cortos\n");
             free(decrypted_data);
-            free(full_block_buffer);
+            free(extracted_data);
             return OPS_DECRYPTION_FAILED;
         }
 
@@ -305,7 +386,7 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
             fprintf(stderr, "       Esperaba: %u bytes, tengo: %zu bytes\n", 
                     4 + real_data_size, decrypted_length);
             free(decrypted_data);
-            free(full_block_buffer);
+            free(extracted_data);
             return OPS_DECRYPTION_FAILED;
         }
 
@@ -320,7 +401,7 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
         {
             fprintf(stderr, "Error: No encontre terminador de extension\n");
             free(decrypted_data);
-            free(full_block_buffer);
+            free(extracted_data);
             return OPS_EXTENSION_NOT_FOUND;
         }
 
@@ -329,7 +410,7 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
         {
             fprintf(stderr, "Error: No pude escribir archivo de salida '%s'\n", config->out_file);
             free(decrypted_data);
-            free(full_block_buffer);
+            free(extracted_data);
             return OPS_OUTPUT_WRITE_FAILED;
         }
 
@@ -356,14 +437,14 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
         if (extension_length == 16)
         {
             fprintf(stderr, "Error: No encontre terminador de extension\n");
-            free(full_block_buffer);
+            free(extracted_data);
             return OPS_EXTENSION_NOT_FOUND;
         }
 
         if (write_file(config->out_file, file_data, real_data_size) != 0)
         {
             fprintf(stderr, "Error: No pude escribir archivo de salida '%s'\n", config->out_file);
-            free(full_block_buffer);
+            free(extracted_data);
             return OPS_OUTPUT_WRITE_FAILED;
         }
 
@@ -373,6 +454,6 @@ OperationsResult perform_extract(const stegobmp_config_t *config, const Bmp *bmp
         printf("Metodo: %s\n", steg_method_name);
     }
 
-    free(full_block_buffer);
+    free(extracted_data);
     return OPS_OK;
 }
