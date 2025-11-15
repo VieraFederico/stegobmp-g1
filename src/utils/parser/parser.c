@@ -5,25 +5,49 @@
 
 // Helper functions to convert strings to enums
 static steg_method_t parse_steg_method(const char *str) {
-    if (strcmp(str, "LSB1") == 0) return STEG_LSB1;
-    if (strcmp(str, "LSB4") == 0) return STEG_LSB4;
-    if (strcmp(str, "LSBI") == 0) return STEG_LSBI;
+    // Convert to uppercase for case-insensitive comparison
+    char upper[32];
+    int i = 0;
+    for (; str[i] && i < 31; i++) {
+        upper[i] = (str[i] >= 'a' && str[i] <= 'z') ? str[i] - 32 : str[i];
+    }
+    upper[i] = '\0';
+    
+    if (strcmp(upper, "LSB1") == 0) return STEG_LSB1;
+    if (strcmp(upper, "LSB4") == 0) return STEG_LSB4;
+    if (strcmp(upper, "LSBI") == 0) return STEG_LSBI;
     return STEG_NONE;
 }
 
 static encryption_algorithm_t parse_encryption_algo(const char *str) {
-    if (strcmp(str, "aes128") == 0) return ENC_AES128;
-    if (strcmp(str, "aes192") == 0) return ENC_AES192;
-    if (strcmp(str, "aes256") == 0) return ENC_AES256;
-    if (strcmp(str, "3des") == 0) return ENC_3DES;
+    // Convert to lowercase for case-insensitive comparison
+    char lower[32];
+    int i = 0;
+    for (; str[i] && i < 31; i++) {
+        lower[i] = (str[i] >= 'A' && str[i] <= 'Z') ? str[i] + 32 : str[i];
+    }
+    lower[i] = '\0';
+    
+    if (strcmp(lower, "aes128") == 0) return ENC_AES128;
+    if (strcmp(lower, "aes192") == 0) return ENC_AES192;
+    if (strcmp(lower, "aes256") == 0) return ENC_AES256;
+    if (strcmp(lower, "3des") == 0 || strcmp(lower, "des") == 0) return ENC_3DES;
     return ENC_NONE;
 }
 
 static encryption_mode_t parse_encryption_mode(const char *str) {
-    if (strcmp(str, "ecb") == 0) return MODE_ECB;
-    if (strcmp(str, "cfb") == 0) return MODE_CFB;
-    if (strcmp(str, "ofb") == 0) return MODE_OFB;
-    if (strcmp(str, "cbc") == 0) return MODE_CBC;
+    // Convert to lowercase for case-insensitive comparison
+    char lower[32];
+    int i = 0;
+    for (; str[i] && i < 31; i++) {
+        lower[i] = (str[i] >= 'A' && str[i] <= 'Z') ? str[i] + 32 : str[i];
+    }
+    lower[i] = '\0';
+    
+    if (strcmp(lower, "ecb") == 0) return MODE_ECB;
+    if (strcmp(lower, "cfb") == 0) return MODE_CFB;
+    if (strcmp(lower, "ofb") == 0) return MODE_OFB;
+    if (strcmp(lower, "cbc") == 0) return MODE_CBC;
     return MODE_NONE;
 }
 
