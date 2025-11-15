@@ -33,7 +33,7 @@ int lsb1_embed(BMPImage *bmp, const uint8_t *data, size_t num_bits, size_t *offs
     return 0;
 }
 
-int lsb1_extract(const BMPImage *bmp, size_t num_bits, uint8_t *buffer, size_t *offset, void *context) {
+int lsb1_extract(const BMPImage *bmp, size_t num_bits, uint8_t *buffer, size_t *offset) {
     if (bmp == NULL || bmp->data == NULL || buffer == NULL || offset == NULL) {
         return -1;
     }

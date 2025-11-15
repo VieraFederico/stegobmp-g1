@@ -34,7 +34,6 @@ int lsb4_embed(BMPImage *bmp, const uint8_t *data, size_t num_bits, size_t *offs
  * @param num_bits Number of bits to extract (must be multiple of 4)
  * @param buffer Pointer to the output buffer where extracted data will be stored
  * @param offset Pointer to the starting component index (updated after extraction)
- * @param context Context parameter (unused for LSB4, can be NULL)
  * 
  * @return 0 on success, negative error code on failure
  * 
@@ -42,7 +41,7 @@ int lsb4_embed(BMPImage *bmp, const uint8_t *data, size_t num_bits, size_t *offs
  * @note Extracts exactly num_bits bits from the pixel data
  * @note Each extracted byte comes from 2 consecutive components
  */
-int lsb4_extract(const BMPImage *bmp, size_t num_bits, uint8_t *buffer, size_t *offset, void *context);
+int lsb4_extract(const BMPImage *bmp, size_t num_bits, uint8_t *buffer, size_t *offset);
 
 #endif // LSB4_H
 

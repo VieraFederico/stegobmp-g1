@@ -29,8 +29,6 @@ echo "║                                                              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-echo -e "${YELLOW} Starting ultra-fast compilation...${NC}"
-echo ""
 
 # Compile all source files directly with progress indicators
 echo -e "${BLUE} Compiling source files...${NC}"
