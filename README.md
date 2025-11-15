@@ -102,25 +102,6 @@ Derivación de clave:
 - ```PBKDF2``` con salt fijo (requisito del TPE)
 - El archivo se cifra completo, y luego se oculta junto con:
 
-## Testing y validación (incluye LSBI)
-
-El proyecto incluye un script test.sh utilizado para validar:
-
-
-- ```LSB1``` / ```LSB4``` / ```LSBI```
-
-
-- Embed y extract con y sin cifrado
-
-- Integridad tras encriptar–ocultar–extraer–desencriptar
-
-- Manejo correcto del pattern map ```LSBI```
-
-- Capacidades y errores del BMP
-
-- Padding y modos de cifrado
-
-Este script fue usado intensivamente para garantizar el correcto funcionamiento del algoritmo ```LSBI```, que es el más sensible a errores.
 #  Estructura del proyecto
 
 ```plaintext
