@@ -1,8 +1,8 @@
 # stegobmp — Trabajo Práctico de Esteganografía
 
-Este proyecto implementa un programa de esteganografía para ocultar y extraer archivos dentro de imágenes BMP de 24 bits, cumpliendo con los requisitos del Trabajo Práctico de la materia Criptografía y Seguridad (72.04) del ITBA.
+Este proyecto implementa un programa de esteganografía para ocultar y extraer archivos dentro de imágenes BMP de ```24 bits```, cumpliendo con los requisitos del Trabajo Práctico de la materia Criptografía y Seguridad (72.04) del ITBA.
 
-El programa soporta los métodos LSB1, LSB4 y LSBI, y cuenta con encriptación opcional mediante AES (128/192/256) y 3DES en modos CBC, CFB y OFB.
+El programa soporta los métodos ```LSB1```, ```LSB4``` y ```LSBI```, y cuenta con encriptación opcional mediante ```AES (128/192/256)``` y ```3DES``` en modos ```CBC```, ```CFB``` y ```OFB```.
 
 # Objetivos del proyecto
 
@@ -10,44 +10,62 @@ Introducir conceptos de esteganografía digital.
 
 Implementar métodos de ocultamiento en imágenes BMP.
 
-Comparar LSB1, LSB4 y LSBI.
+Comparar ```LSB1```, ```LSB4``` y ```LSBI```.
 
 Incorporar cifrado simétrico para mayor seguridad.
 
 Extraer información oculta y realizar estegoanálisis.
 
+# Compilación
+
+Requisitos:
+* gcc
+* make
+* libssl-dev
+
+Compilar:
+* ```./build.sh```
+
+Ejecutar:
+* ```./stegobmp```
+
 # Uso del programa
-*Ocultar un archivo (embed)*
+## *Ocultar un archivo (embed)*
+```
 ./stegobmp -embed \
-  -in secreto.txt \
-  -p imagen.bmp \
-  -out salida.bmp \
-  -steg LSB1
-
-*Ocultar un archivo con encriptación*
+  -in <input_file>.<extension> \
+  -p <carrier_file>.bmp \
+  -out <output_file>.<extension> \
+  -steg <LSB1 | LSB4 | LSBI>
+```
+## *Ocultar un archivo con encriptación*
+```
 ./stegobmp -embed \
-  -in secreto.txt \
-  -p imagen.bmp \
-  -out salida.bmp \
-  -steg LSBI \
-  -a aes256 \
-  -m cbc \
-  -pass "claveSegura"
-
-*Extraer un archivo (extract)*
+  -in <input_file>.<extension> \
+  -p <carrier_file>.bmp \
+  -out <output_file>.<extension> \
+  -steg <LSB1 | LSB4 | LSBI> \
+  -a <aes128 | aes192 | aes256 | 3des> \
+  -m <ecb | cfb | ofb | cbc>  \
+  -pass <password>
+```
+## *Extraer un archivo (extract)*
+```
 ./stegobmp -extract \
-  -p salida.bmp \
-  -out recuperado.txt \
-  -steg LSB4
-
-*Extraer con desencriptado*
+  -p <embedded_file>.bmp \
+  -out <output_file>.<extension> \
+  -steg <LSB1 | LSB4 | LSBI>
+```
+## *Extraer con desencriptado*
+```
 ./stegobmp -extract \ 
-  -p salida.bmp \
-  -out recuperado.txt \
-  -steg LSBI \
-  -a 3des \
-  -m ofb \
-  -pass "claveSegura"
+  -p <embedded_file>.bmp \
+  -out <output_file>.<extension> \
+  -steg <LSB1 | LSB4 | LSBI> \
+  -a <aes128 | aes192 | aes256 | 3des> \
+  -m <ecb | cfb | ofb | cbc>  \
+  -pass <password>
+```
 
 ## Algoritmos implementados
 ### LSB1
@@ -73,34 +91,36 @@ Características principales:
 El programa permite cifrar el archivo antes de esteganografiarlo.
 
 Algoritmos:
-- AES128 / AES192 / AES256
-- 3DES
+- ```AES128 / AES192 / AES256```
+- ```3DES```
 Modos:
-- CBC
-- CFB
-- OFB
+- ```CBC```
+- ```CFB```
+- ```OFB```
 
 Derivación de clave:
-- PBKDF2 con salt fijo (requisito del TP)
+- ```PBKDF2``` con salt fijo (requisito del TPE)
 - El archivo se cifra completo, y luego se oculta junto con:
 
 ## Testing y validación (incluye LSBI)
 
 El proyecto incluye un script test.sh utilizado para validar:
 
-LSB1 / LSB4 / LSBI
 
-Embed y extract con y sin cifrado
+- ```LSB1``` / ```LSB4``` / ```LSBI```
 
-Integridad tras encriptar–ocultar–extraer–desencriptar
 
-Manejo correcto del pattern map LSBI
+- Embed y extract con y sin cifrado
 
-Capacidades y errores del BMP
+- Integridad tras encriptar–ocultar–extraer–desencriptar
 
-Padding y modos de cifrado
+- Manejo correcto del pattern map ```LSBI```
 
-Este script fue usado intensivamente para garantizar el correcto funcionamiento del algoritmo LSBI, que es el más sensible a errores.
+- Capacidades y errores del BMP
+
+- Padding y modos de cifrado
+
+Este script fue usado intensivamente para garantizar el correcto funcionamiento del algoritmo ```LSBI```, que es el más sensible a errores.
 #  Estructura del proyecto
 
 ```plaintext
@@ -117,18 +137,6 @@ Este script fue usado intensivamente para garantizar el correcto funcionamiento 
 │   └── translator/       Utilidades adicionales
 └── main.c                Punto de entrada del programa
 ```
-### Compilación
-
-Requisitos:
-* gcc
-* make
-* libssl-dev
-
-Compilar:
-* make
-
-Ejecutar:
-* ./stegobmp
 
 Implementado como parte del Trabajo Práctico de Criptografía y Seguridad (72.04) — ITBA.
 Uso académico y educativo.
